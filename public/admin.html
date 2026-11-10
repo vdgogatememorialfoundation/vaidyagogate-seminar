@@ -3487,6 +3487,33 @@
                     <div><label>Capacity</label><input type="number" id="seminar-capacity" required></div>
                     <div style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="seminar-show-seats-public" checked> Show seat count publicly on registration</label></div>
                 </div>
+                <div style="grid-column:1/-1;margin-top:4px;padding:14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;" id="seminar-seatmap-block">
+                    <h4 style="margin:0 0 6px;color:#0f766e;">Seat selection (theatre style)</h4>
+                    <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Optional. Off = first come, first served (no chart). On = doctors pick their seat on a BookMyShow-style map while registering; a seat is held for 12 minutes until they submit. Block a whole row or single seats (e.g. reserved for staff / judges).</p>
+                    <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:600;"><input type="checkbox" id="seatmap-enabled" onchange="seatMapToggleUi()"> Enable seat map for this seminar</label>
+                    <div id="seatmap-editor" class="hidden">
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:10px;">
+                            <div><label>Stage label</label><input type="text" id="seatmap-stage" value="STAGE" maxlength="30"></div>
+                            <div><label>Seats per booking</label><input type="number" id="seatmap-max" min="1" max="10" value="1"></div>
+                            <div><label style="display:flex;align-items:center;gap:6px;margin-top:22px;"><input type="checkbox" id="seatmap-curve" checked> Curved rows</label></div>
+                        </div>
+                        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:10px;">
+                            <div><label>Quick generate: rows</label><input type="number" id="seatmap-gen-rows" min="1" max="60" value="10" style="width:90px;"></div>
+                            <div><label>Seats per row</label><input type="number" id="seatmap-gen-seats" min="1" max="60" value="20" style="width:90px;"></div>
+                            <div><label>Aisle after seat #</label><input type="text" id="seatmap-gen-aisle" placeholder="e.g. 5,15" style="width:110px;"></div>
+                            <button type="button" class="btn-secondary" onclick="seatMapGenerate()">Generate rows</button>
+                            <button type="button" class="btn-secondary" onclick="seatMapAddRow()">+ Add row</button>
+                            <button type="button" class="btn-secondary" onclick="seatMapAddSection()">+ Add section</button>
+                        </div>
+                        <div id="seatmap-sections" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
+                        <div style="overflow-x:auto;"><table class="data-table" style="font-size:0.8rem;min-width:620px;">
+                            <thead><tr><th>Row</th><th>Seats</th><th>Section</th><th>Aisle after seat #</th><th>Blocked seat #s</th><th>Block row</th><th>Gap below</th><th></th></tr></thead>
+                            <tbody id="seatmap-rows"></tbody>
+                        </table></div>
+                        <div id="seatmap-preview" style="margin-top:12px;"></div>
+                        <div id="seatmap-occupancy" style="margin-top:12px;font-size:0.82rem;"></div>
+                    </div>
+                </div>
                 <div style="grid-column:1/-1;margin-top:4px;padding:14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;">
                     <h4 style="margin:0 0 8px;color:#92400e;">Previous seminar alumni invitations</h4>
                     <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Link one or more past seminars (e.g. 2025 + 2026 when opening 2027). Paid participants from those events receive email and WhatsApp inviting them to register. Each person is notified once per new seminar.</p>
@@ -3875,7 +3902,7 @@
     <script src="/js/commerce-track.js?v=20261029rider11"></script>
     <script src="/js/admin-commerce.js?v=20261029rider2"></script>
     <script src="/js/doctor-module-access.js?v=20261004mod"></script>
-    <script src="/js/admin.js?v=20261105shloka1"></script>
+    <script src="/js/admin.js?v=20261106seat1"></script>
     <script src="/js/admin-online-seminar.js?v=20261030hall3"></script>
     <script src="/js/admin-videos.js?v=20261102groups1"></script>
     <script src="/js/pos-onspot-ui.js?v=20261001m"></script>

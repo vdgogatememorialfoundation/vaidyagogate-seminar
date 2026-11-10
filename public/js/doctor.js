@@ -3969,6 +3969,7 @@ async function startRegistration(seminarId, opts) {
     document.getElementById('seminars-grid-container').classList.add('hidden');
     document.getElementById('seminars-title').classList.add('hidden');
     document.getElementById('multi-step-form').classList.remove('hidden');
+    if (window.SeatPicker) window.SeatPicker.load(sid, editMode || draftResume ? { readOnly: editMode } : {});
     const tncEl = document.getElementById('reg-tnc-text');
     const cancelEl = document.getElementById('reg-cancel-policy-text');
     const cancelWrap = document.getElementById('reg-cancel-policy-wrap');
@@ -7014,6 +7015,11 @@ async function saveApplicationDraft() {
         payload.append('userIdString', String(currentUser.user_id_string));
     }
     payload.append('seminarId', String(sid));
+    if (window.SeatPicker && window.SeatPicker.isActive(sid)) {
+        const seatCheck = window.SeatPicker.validateForSubmit();
+        if (!seatCheck.ok) return alert(seatCheck.error);
+        if (seatCheck.seats.length) formDataObj.__seats = seatCheck.seats;
+    }
     payload.append('formData', JSON.stringify(formDataObj));
     const certFile = document.getElementById('reg-cert-file')?.files?.[0];
     if (certFile) {

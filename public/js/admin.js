@@ -15798,6 +15798,7 @@ window.sendSeminarAlumniNotify = sendSeminarAlumniNotify;
 function openCreateSeminarModal() {
     document.getElementById('admin-seminar-modal').classList.remove('hidden');
     document.getElementById('seminar-form').reset();
+    loadSeatMapUi(null, '');
     document.getElementById('seminar-id').value = '';
     const otpCh = document.getElementById('seminar-otp-app');
     if (otpCh) otpCh.checked = true;
@@ -16153,6 +16154,7 @@ function editSeminar(index) {
     syncSeminarOtpOptionsUi();
     loadSeminarCancellationUi(s.cancellation_policy_json || '');
     loadSeminarFormOverrideUi(s.registration_form_json || '');
+    loadSeatMapUi(s.id, s.seat_map_json || '');
     const hi = document.getElementById('seminar-hero-image');
     if (hi) hi.value = s.hero_image_path || '';
     const fl = document.getElementById('seminar-flyer');
@@ -16283,6 +16285,7 @@ async function saveSeminar(e) {
         });
         const result = await res.json();
         if (result.success) {
+            await saveSeatMapForSeminar(result.seminarId || id);
             alert('Seminar saved successfully!');
             document.getElementById('admin-seminar-modal').classList.add('hidden');
             loadSeminars();
@@ -25010,3 +25013,161 @@ window.addSeminarDayRow = addSeminarDayRow;
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
     else bind();
 })();
+
+
+/* ---------- Seat map editor (theatre style) ---------- */
+let seatMapState = { sections: [{ name: 'General', color: '#0f766e', price: '' }], rows: [], seminarId: null };
+function seatMapRowLabel(i) { let s = '', n = i; do { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while (n >= 0); return s; }
+function seatMapToggleUi() {
+    const on = document.getElementById('seatmap-enabled')?.checked;
+    document.getElementById('seatmap-editor')?.classList.toggle('hidden', !on);
+    if (on && !seatMapState.rows.length) seatMapGenerate();
+}
+function loadSeatMapUi(seminarId, json) {
+    let m = null;
+    try { m = json ? JSON.parse(json) : null; } catch (_) { m = null; }
+    seatMapState = {
+        seminarId: seminarId || null,
+        sections: (m && Array.isArray(m.sections) && m.sections.length ? m.sections : [{ name: 'General', color: '#0f766e', price: '' }]).map((x) => ({ name: x.name || '', color: x.color || '#0f766e', price: x.price == null ? '' : x.price })),
+        rows: (m && Array.isArray(m.rows) ? m.rows : []).map((r) => ({ label: r.label, seats: r.seats, section: r.section || 0, blocked: !!r.blocked, blockedSeats: r.blockedSeats || [], gapAfter: r.gapAfter || [], spaceAfter: !!r.spaceAfter }))
+    };
+    const en = document.getElementById('seatmap-enabled'); if (en) en.checked = !!(m && m.enabled);
+    const st = document.getElementById('seatmap-stage'); if (st) st.value = (m && m.stageLabel) || 'STAGE';
+    const mx = document.getElementById('seatmap-max'); if (mx) mx.value = (m && m.maxPerBooking) || 1;
+    const cv = document.getElementById('seatmap-curve'); if (cv) cv.checked = m ? !!m.curve : true;
+    document.getElementById('seatmap-editor')?.classList.toggle('hidden', !(m && m.enabled));
+    seatMapRender();
+    const occ = document.getElementById('seatmap-occupancy'); if (occ) occ.innerHTML = '';
+    if (seminarId && m && m.enabled) seatMapLoadOccupancy(seminarId);
+}
+function seatMapGenerate() {
+    const rows = Math.max(1, Math.min(60, parseInt(document.getElementById('seatmap-gen-rows').value, 10) || 10));
+    const seats = Math.max(1, Math.min(60, parseInt(document.getElementById('seatmap-gen-seats').value, 10) || 20));
+    const aisle = String(document.getElementById('seatmap-gen-aisle').value || '').split(/[,\s]+/).map((x) => parseInt(x, 10)).filter((n) => n >= 1 && n < seats);
+    seatMapState.rows = Array.from({ length: rows }, (_, i) => ({ label: seatMapRowLabel(i), seats, section: 0, blocked: false, blockedSeats: [], gapAfter: aisle, spaceAfter: false }));
+    seatMapRender();
+}
+function seatMapAddRow() {
+    const i = seatMapState.rows.length;
+    const prev = seatMapState.rows[i - 1];
+    seatMapState.rows.push({ label: seatMapRowLabel(i), seats: prev ? prev.seats : 20, section: prev ? prev.section : 0, blocked: false, blockedSeats: [], gapAfter: prev ? prev.gapAfter.slice() : [], spaceAfter: false });
+    seatMapRender();
+}
+function seatMapAddSection() {
+    const palette = ['#0f766e', '#1d4ed8', '#b45309', '#7e22ce', '#be123c', '#15803d'];
+    seatMapState.sections.push({ name: 'Section ' + (seatMapState.sections.length + 1), color: palette[seatMapState.sections.length % palette.length], price: '' });
+    seatMapRender();
+}
+function seatMapSyncFromInputs() {
+    document.querySelectorAll('#seatmap-sections [data-si]').forEach((w) => {
+        const i = +w.dataset.si; const s = seatMapState.sections[i]; if (!s) return;
+        s.name = w.querySelector('.sm-sname').value; s.color = w.querySelector('.sm-scolor').value; s.price = w.querySelector('.sm-sprice').value;
+    });
+    document.querySelectorAll('#seatmap-rows tr[data-ri]').forEach((tr) => {
+        const i = +tr.dataset.ri; const r = seatMapState.rows[i]; if (!r) return;
+        r.label = tr.querySelector('.sm-label').value.toUpperCase().slice(0, 4) || seatMapRowLabel(i);
+        r.seats = Math.max(0, Math.min(60, parseInt(tr.querySelector('.sm-seats').value, 10) || 0));
+        r.section = parseInt(tr.querySelector('.sm-section').value, 10) || 0;
+        r.gapAfter = tr.querySelector('.sm-gap').value.split(/[,\s]+/).map((x) => parseInt(x, 10)).filter((n) => n >= 1 && n < r.seats);
+        r.blockedSeats = tr.querySelector('.sm-blocked').value.split(/[,\s]+/).map((x) => parseInt(x, 10)).filter((n) => n >= 1 && n <= r.seats);
+        r.blocked = tr.querySelector('.sm-blockrow').checked;
+        r.spaceAfter = tr.querySelector('.sm-space').checked;
+    });
+}
+function seatMapRemoveRow(i) { seatMapSyncFromInputs(); seatMapState.rows.splice(i, 1); seatMapRender(); }
+function seatMapRemoveSection(i) { if (seatMapState.sections.length <= 1) return; seatMapSyncFromInputs(); seatMapState.sections.splice(i, 1); seatMapState.rows.forEach((r) => { if (r.section >= seatMapState.sections.length) r.section = 0; }); seatMapRender(); }
+function seatMapToggleSeat(ri, n) {
+    seatMapSyncFromInputs();
+    const r = seatMapState.rows[ri]; if (!r) return;
+    const i = r.blockedSeats.indexOf(n);
+    if (i >= 0) r.blockedSeats.splice(i, 1); else r.blockedSeats.push(n);
+    r.blockedSeats.sort((a, b) => a - b);
+    seatMapRender();
+}
+function seatMapRender() {
+    const secWrap = document.getElementById('seatmap-sections'); if (!secWrap) return;
+    secWrap.innerHTML = seatMapState.sections.map((s, i) => `<span data-si="${i}" style="display:inline-flex;gap:6px;align-items:center;padding:6px 8px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;">
+        <input type="color" class="sm-scolor" value="${escapeHtml(s.color)}" title="Colour" style="width:30px;height:26px;padding:0;border:none;" onchange="seatMapSyncFromInputs();seatMapRender()">
+        <input type="text" class="sm-sname" value="${escapeHtml(s.name)}" placeholder="Section name" style="width:120px;" onchange="seatMapSyncFromInputs();seatMapRender()">
+        <input type="number" class="sm-sprice" value="${escapeHtml(s.price)}" placeholder="₹ (optional)" style="width:100px;" title="Price shown to doctors (informational)" onchange="seatMapSyncFromInputs()">
+        ${seatMapState.sections.length > 1 ? `<button type="button" class="btn-secondary" style="padding:2px 8px;" onclick="seatMapRemoveSection(${i})">✕</button>` : ''}
+    </span>`).join('');
+    const secOpts = (sel) => seatMapState.sections.map((s, i) => `<option value="${i}" ${i === sel ? 'selected' : ''}>${escapeHtml(s.name || 'Section ' + (i + 1))}</option>`).join('');
+    document.getElementById('seatmap-rows').innerHTML = seatMapState.rows.map((r, i) => `<tr data-ri="${i}">
+        <td><input type="text" class="sm-label" value="${escapeHtml(r.label)}" maxlength="4" style="width:52px;" onchange="seatMapSyncFromInputs();seatMapRender()"></td>
+        <td><input type="number" class="sm-seats" value="${r.seats}" min="0" max="60" style="width:64px;" onchange="seatMapSyncFromInputs();seatMapRender()"></td>
+        <td><select class="sm-section" onchange="seatMapSyncFromInputs();seatMapRender()">${secOpts(r.section)}</select></td>
+        <td><input type="text" class="sm-gap" value="${escapeHtml(r.gapAfter.join(','))}" placeholder="5,15" style="width:80px;" onchange="seatMapSyncFromInputs();seatMapRender()"></td>
+        <td><input type="text" class="sm-blocked" value="${escapeHtml(r.blockedSeats.join(','))}" placeholder="1,2" style="width:110px;" onchange="seatMapSyncFromInputs();seatMapRender()"></td>
+        <td style="text-align:center;"><input type="checkbox" class="sm-blockrow" ${r.blocked ? 'checked' : ''} onchange="seatMapSyncFromInputs();seatMapRender()"></td>
+        <td style="text-align:center;"><input type="checkbox" class="sm-space" ${r.spaceAfter ? 'checked' : ''} onchange="seatMapSyncFromInputs();seatMapRender()"></td>
+        <td><button type="button" class="btn-secondary" style="padding:2px 8px;" onclick="seatMapRemoveRow(${i})">✕</button></td>
+    </tr>`).join('');
+    // preview (click a seat to block/unblock it)
+    const occ = window.__seatMapOccupancy || {};
+    let total = 0, blockedN = 0;
+    const pv = seatMapState.rows.map((r, ri) => {
+        const sec = seatMapState.sections[r.section] || seatMapState.sections[0];
+        let cells = '';
+        for (let n = 1; n <= r.seats; n++) {
+            const code = r.label + n;
+            const blocked = r.blocked || r.blockedSeats.includes(n);
+            total += blocked ? 0 : 1; blockedN += blocked ? 1 : 0;
+            const o = occ[code];
+            const bg = blocked ? '#f1f5f9' : o ? (o.status === 'booked' ? sec.color : '#fde68a') : '#fff';
+            const fg = blocked ? '#cbd5e1' : o && o.status === 'booked' ? '#fff' : '#334155';
+            const title = blocked ? code + ' (blocked)' : o ? code + ' — ' + (o.status === 'booked' ? 'Booked: ' : 'Held: ') + (o.name || '') + (o.application_no ? ' (' + o.application_no + ')' : '') : code;
+            cells += `<button type="button" title="${escapeHtml(title)}" onclick="${o ? `seatMapAdminSeatMenu('${code}')` : `seatMapToggleSeat(${ri},${n})`}" style="width:22px;height:22px;border-radius:6px 6px 3px 3px;border:1.5px solid ${blocked ? '#e2e8f0' : sec.color};background:${bg};color:${fg};font-size:.55rem;font-weight:700;cursor:pointer;">${n}</button>`;
+            if (r.gapAfter.includes(n)) cells += '<span style="width:14px;display:inline-block;"></span>';
+        }
+        return `<div style="display:flex;gap:4px;align-items:center;${r.spaceAfter ? 'margin-bottom:10px;' : ''}"><span style="width:22px;font-size:.7rem;font-weight:800;color:#64748b;text-align:center;">${escapeHtml(r.label)}</span>${cells}</div>`;
+    }).join('');
+    document.getElementById('seatmap-preview').innerHTML = `<div style="font-size:.78rem;color:#475569;margin-bottom:6px;"><b>Preview</b> — ${total} bookable seat(s), ${blockedN} blocked. Click a seat to block/unblock; click a booked/held seat to release or reassign. <span style="display:inline-block;width:10px;height:10px;background:#fde68a;border-radius:3px;"></span> held <span style="display:inline-block;width:10px;height:10px;background:#0f766e;border-radius:3px;margin-left:6px;"></span> booked</div>
+        <div style="margin:0 auto 10px;max-width:380px;height:22px;border-radius:0 0 40px 40px;background:#e2e8f0;text-align:center;font-size:.65rem;letter-spacing:.3em;line-height:22px;color:#475569;font-weight:800;">${escapeHtml(document.getElementById('seatmap-stage').value || 'STAGE')}</div>
+        <div style="overflow-x:auto;padding-bottom:6px;"><div style="display:flex;flex-direction:column;gap:4px;align-items:center;min-width:max-content;">${pv}</div></div>`;
+}
+function buildSeatMapJsonFromUi() {
+    seatMapSyncFromInputs();
+    return {
+        enabled: !!document.getElementById('seatmap-enabled')?.checked,
+        stageLabel: document.getElementById('seatmap-stage').value || 'STAGE',
+        maxPerBooking: parseInt(document.getElementById('seatmap-max').value, 10) || 1,
+        curve: !!document.getElementById('seatmap-curve')?.checked,
+        sections: seatMapState.sections.map((s) => ({ name: s.name, color: s.color, price: s.price === '' ? null : Number(s.price) })),
+        rows: seatMapState.rows
+    };
+}
+async function saveSeatMapForSeminar(seminarId) {
+    if (!seminarId || !document.getElementById('seatmap-enabled')) return;
+    try {
+        const r = await fetch('/api/admin/seminars/' + seminarId + '/seat-map', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seat_map: buildSeatMapJsonFromUi() }) });
+        const d = await r.json();
+        if (!r.ok) alert('Seat map not saved: ' + (d.error || r.status));
+    } catch (e) { alert('Seat map not saved: ' + e.message); }
+}
+async function seatMapLoadOccupancy(seminarId) {
+    try {
+        const r = await fetch('/api/admin/seminars/' + seminarId + '/seat-map', { cache: 'no-store' });
+        const d = await r.json();
+        const occ = {}; (d.seats || []).forEach((s) => { occ[s.seat_code] = s; });
+        window.__seatMapOccupancy = occ;
+        const booked = (d.seats || []).filter((s) => s.status === 'booked').length, held = (d.seats || []).length - booked;
+        const el = document.getElementById('seatmap-occupancy');
+        if (el) el.innerHTML = `<b>${booked}</b> booked · <b>${held}</b> held right now. <label style="margin-left:10px;">Assign seat: <input type="text" id="seatmap-assign-seat" placeholder="A12" style="width:70px;"> to application <input type="text" id="seatmap-assign-app" placeholder="Application no" style="width:150px;"> <button type="button" class="btn-secondary" onclick="seatMapAssign()">Assign</button></label>`;
+        seatMapRender();
+    } catch (_) {}
+}
+async function seatMapAdminSeatMenu(code) {
+    const o = (window.__seatMapOccupancy || {})[code]; if (!o || !seatMapState.seminarId) return;
+    if (!confirm(`Release seat ${code} (${o.status}${o.name ? ': ' + o.name : ''})?`)) return;
+    await fetch('/api/admin/seminars/' + seatMapState.seminarId + '/seats/release', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seat: code }) });
+    seatMapLoadOccupancy(seatMapState.seminarId);
+}
+async function seatMapAssign() {
+    const seat = document.getElementById('seatmap-assign-seat').value.trim(), app = document.getElementById('seatmap-assign-app').value.trim();
+    if (!seat || !app || !seatMapState.seminarId) return alert('Enter seat and application number (save the seminar first).');
+    const r = await fetch('/api/admin/seminars/' + seatMapState.seminarId + '/seats/assign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seat, applicationNo: app }) });
+    const d = await r.json();
+    if (!r.ok) return alert(d.error || 'Failed');
+    seatMapLoadOccupancy(seatMapState.seminarId);
+}

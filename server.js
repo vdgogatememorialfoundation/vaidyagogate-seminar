@@ -24,6 +24,7 @@ const pincodeLookup = require('./lib/pincode-lookup');
 const countriesList = require('./lib/countries');
 const designatedNotify = require('./lib/designated-notify');
 const ticketHtml = require('./lib/ticket-html');
+const seatMap = require('./lib/seat-map');
 const userNameSync = require('./lib/user-name-sync');
 const ticketAccess = require('./lib/ticket-access');
 const ticketPdfServer = require('./lib/certificate-pdf-server');
@@ -298,6 +299,7 @@ function mountPaymentsRoutes() {
         parsePositiveUserId
     });
     require('./lib/tookan-field-routes').registerTookanFieldRoutes(app, db);
+    seatMap.ensureSchema(db, () => seatMap.mountRoutes(app, db, {}));
     require('./lib/video-library').registerVideoLibraryRoutes(app, db, {
         listDoctorPaymentOptions,
         parsePositiveUserId
@@ -5887,6 +5889,8 @@ app.post('/api/applications/submit', requestGuard.registrationSubmitLimit, withC
                     function doInsertRegistration() {
                         const applicationNo = existingDraftAppNo || generateId();
                         const autoRejectDuplicateAndRespond = (dup) => {
+                            const wantedSeats = formData && Array.isArray(formData.__seats) ? formData.__seats.slice(0, 10) : [];
+                            if (formData && formData.__seats) delete formData.__seats;
                             const stored = sanitizeFormDataForStorage(formData || {});
                             const review = {
                                 decision: 'auto_rejected_duplicate',
@@ -5927,6 +5931,9 @@ app.post('/api/applications/submit', requestGuard.registrationSubmitLimit, withC
                             const regStatus = isWaitlistSubmit ? 'waitlisted' : 'submitted';
                             const afterRegInserted = (newId, err3) => {
                                 if (err3) return res.status(500).json({ error: err3.message });
+                                if (newId && Array.isArray(wantedSeats) && wantedSeats.length) {
+                                    seatMap.confirmSeats(db, seminarId, userId, newId, wantedSeats, () => {});
+                                }
                                 userNameSync.syncUserNameFromFormData(db, userId, stored, (nErr) => {
                                     if (nErr) console.warn('[name-sync] submit:', nErr.message);
                                 });
