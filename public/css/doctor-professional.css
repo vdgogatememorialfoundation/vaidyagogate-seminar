@@ -569,3 +569,22 @@
 @media (max-width: 768px) {
     .doctor-professional #vgmf-doctor-live-launcher { bottom: calc(96px + env(safe-area-inset-bottom)) !important; right: 14px !important; width: 50px !important; height: 50px !important; }
 }
+@media (min-width: 769px) {
+    body.doctor-nav-collapsed .menu-item { font-size: 0 !important; line-height: 0 !important; gap: 0 !important; }
+    body.doctor-nav-collapsed .menu-item i { font-size: 1.1rem !important; line-height: 1 !important; }
+}
+/* ---------- All text black (menu-style); accents only on icons/buttons ---------- */
+.doctor-professional h1, .doctor-professional h2, .doctor-professional h3, .doctor-professional h4, .doctor-professional h5,
+.doctor-professional .section-title, .doctor-professional .header-title, .doctor-professional .card h3, .doctor-professional .card h4,
+.doctor-professional label, .doctor-professional th, .doctor-professional td, .doctor-professional p, .doctor-professional li,
+.doctor-professional .stat-label, .doctor-professional .stat-value, .doctor-professional .dv2-hero h3, .doctor-professional .dv2-stat h4,
+.doctor-professional .portal-login-time, .doctor-professional .header-link, .doctor-professional .sidebar-header h2,
+.doctor-professional .menu-item, .doctor-professional .menu-item.active, .doctor-professional .doctor-updates h4, .doctor-professional .doctor-updates strong {
+    color: var(--dp-ink) !important;
+}
+.doctor-professional .menu-item.active { color: var(--dp-ink) !important; }
+.doctor-professional .btn-primary, .doctor-professional .btn-primary *, .doctor-professional .doctor-bottom-nav button.active,
+.doctor-professional .doctor-bottom-nav button.active i { color: inherit !important; }
+.doctor-professional .btn-primary { color: #fff !important; }
+.doctor-professional .btn-secondary, .doctor-professional .btn-secondary * { color: var(--dp-button, var(--dp-accent)) !important; }
+.doctor-professional .doctor-bottom-nav button.active, .doctor-professional .doctor-bottom-nav button.active i { color: var(--dp-button, var(--dp-accent)) !important; }
