@@ -10682,3 +10682,33 @@ function renderDashboardV2(d) {
         }
     }
 }
+
+
+/* ---------- Doctor portal v2 shell ---------- */
+(function v2Shell() {
+    const body = document.body;
+    if (!body || !body.classList.contains('doctor-v2')) return;
+    try { if (localStorage.getItem('doctorV2Collapsed') === '1' && window.innerWidth > 900) body.classList.add('v2-collapsed'); } catch (_) {}
+    const cb = document.getElementById('v2-collapse-btn');
+    if (cb) cb.addEventListener('click', () => {
+        body.classList.toggle('v2-collapsed');
+        const on = body.classList.contains('v2-collapsed');
+        cb.innerHTML = on ? '<i class="fas fa-angles-right"></i>' : '<i class="fas fa-angles-left"></i>';
+        try { localStorage.setItem('doctorV2Collapsed', on ? '1' : '0'); } catch (_) {}
+    });
+    const bottom = document.getElementById('v2-bottom-nav');
+    if (bottom) bottom.querySelectorAll('button[data-tab]').forEach((b) => b.addEventListener('click', () => {
+        const mi = document.querySelector('.menu-item[data-tab="' + b.dataset.tab + '"]');
+        if (typeof switchTab === 'function') switchTab(b.dataset.tab, mi || undefined);
+    }));
+    const title = document.querySelector('.header-title');
+    const sync = () => {
+        const active = document.querySelector('.menu-item.active');
+        const tab = active ? active.dataset.tab : '';
+        if (title && active) title.setAttribute('data-v2-title', (active.textContent || '').trim());
+        if (bottom) bottom.querySelectorAll('button[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+    };
+    sync();
+    const mo = new MutationObserver(sync);
+    document.querySelectorAll('.menu-item').forEach((m) => mo.observe(m, { attributes: true, attributeFilter: ['class'] }));
+})();

@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
     <link rel="stylesheet" href="/css/video-library.css?v=20261102ads1">
     <link rel="stylesheet" href="/css/doctor-professional.css?v=20261106dash1">
+    <link rel="stylesheet" href="/css/doctor-v2.css?v=20261106v2b">
     <style>
         :root {
             --doctor-primary: #0f766e;
@@ -203,7 +204,7 @@
 
     </style>
 </head>
-<body class="portal-bright doctor-professional" data-portal-theme="doctor">
+<body class="portal-bright doctor-professional doctor-v2" data-portal-theme="doctor">
 
     <!-- Doctor portal login -->
     <div id="auth-overlay">
@@ -331,11 +332,19 @@
         </aside>
 
         <div id="doctor-nav-backdrop" class="doctor-nav-backdrop" aria-hidden="true"></div>
+        <nav class="v2-bottom-nav" id="v2-bottom-nav" aria-label="Quick navigation">
+            <button type="button" data-tab="tab-dashboard"><i class="fas fa-house"></i>Home</button>
+            <button type="button" data-tab="tab-seminars"><i class="fas fa-calendar-check"></i>Seminars</button>
+            <button type="button" data-tab="tab-applications"><i class="fas fa-route"></i>Track</button>
+            <button type="button" data-tab="tab-ticket"><i class="fas fa-qrcode"></i>Tickets</button>
+            <button type="button" data-tab="tab-profile"><i class="fas fa-user"></i>Profile</button>
+        </nav>
 
         <div class="main-content">
             <header class="top-header">
                 <button type="button" class="doctor-menu-toggle" id="doctor-menu-toggle" aria-label="Open menu" data-i18n-aria="common.open"><i class="fas fa-bars"></i></button>
-                <div class="header-title" data-i18n="doctor.headerTitle">Vaidya Gogate Memorial Foundation — Doctor's Portal</div>
+                <button type="button" class="v2-collapse-btn" id="v2-collapse-btn" aria-label="Collapse menu" title="Collapse menu"><i class="fas fa-angles-left"></i></button>
+                <div class="header-title" data-v2-title="Dashboard" data-i18n="doctor.headerTitle">Vaidya Gogate Memorial Foundation — Doctor's Portal</div>
                 <div class="user-info">
                     <img id="header-profile-photo" class="doctor-header-photo hidden" alt="Profile photo" src="">
                     <span class="hi-user" id="header-name">Hi, Doctor</span>
@@ -1034,7 +1043,7 @@
     })();
     </script>
     <script src="/js/seat-picker.js?v=20261106seat1"></script>
-    <script src="/js/doctor.js?v=20261106seat1"></script>
+    <script src="/js/doctor.js?v=20261106v2a"></script>
     <script src="/js/doctor-online-seminar.js?v=20261030hall2"></script>
 </body>
 </html>
