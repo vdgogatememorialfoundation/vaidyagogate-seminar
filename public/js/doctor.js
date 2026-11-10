@@ -10712,3 +10712,42 @@ function renderDashboardV2(d) {
     const mo = new MutationObserver(sync);
     document.querySelectorAll('.menu-item').forEach((m) => mo.observe(m, { attributes: true, attributeFilter: ['class'] }));
 })();
+
+
+/* ---------- Doctor portal v3: horizontal pill navigation mirrored from the (hidden) side menu ---------- */
+(function v3Nav() {
+    const body = document.body;
+    if (!body || !body.classList.contains('doctor-v3')) return;
+    const nav = document.getElementById('v3-nav');
+    const menu = document.querySelector('.sidebar .menu-items');
+    if (!nav || !menu) return;
+    const yl = document.getElementById('doctor-portal-year-label');
+    const y3 = document.getElementById('v3-year');
+    if (yl && y3) y3.textContent = yl.textContent;
+    let building = false;
+    const build = () => {
+        if (building) return;
+        building = true;
+        const items = Array.from(menu.querySelectorAll('.menu-item')).filter((m) => !m.classList.contains('hidden') && m.style.display !== 'none' && !m.hidden);
+        nav.innerHTML = '';
+        items.forEach((m) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.dataset.tab = m.dataset.tab || '';
+            const icon = m.querySelector('i');
+            b.innerHTML = (icon ? '<i class="' + icon.className + '"></i>' : '') + '<span>' + (m.textContent || '').trim() + '</span>';
+            if (m.hasAttribute('data-menu-parent')) b.classList.add('v3-child');
+            if (m.classList.contains('active')) b.classList.add('active');
+            b.addEventListener('click', () => m.click());
+            nav.appendChild(b);
+        });
+        building = false;
+    };
+    build();
+    const mo = new MutationObserver(() => {
+        build();
+        const a = nav.querySelector('button.active');
+        if (a && typeof a.scrollIntoView === 'function') a.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    });
+    mo.observe(menu, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'data-menu-parent', 'hidden'] });
+})();
