@@ -588,3 +588,10 @@
 .doctor-professional .btn-primary { color: #fff !important; }
 .doctor-professional .btn-secondary, .doctor-professional .btn-secondary * { color: var(--dp-button, var(--dp-accent)) !important; }
 .doctor-professional .doctor-bottom-nav button.active, .doctor-professional .doctor-bottom-nav button.active i { color: var(--dp-button, var(--dp-accent)) !important; }
+/* ---------- Dark-blue buttons & text ---------- */
+.doctor-professional { --dp-button: #1e3a8a; --dp-button-dark: #172c6b; --dp-ink: #1e3a8a; }
+.doctor-professional .btn-secondary, .doctor-professional button.btn-secondary, .doctor-professional .dv2-hero-actions .btn-secondary {
+    background: var(--dp-button, #1e3a8a) !important; color: #fff !important; border-color: var(--dp-button, #1e3a8a) !important;
+}
+.doctor-professional .btn-secondary *, .doctor-professional .dv2-hero-actions .btn-secondary * { color: #fff !important; }
+.doctor-professional .btn-secondary:hover { background: var(--dp-button-dark, #172c6b) !important; }
