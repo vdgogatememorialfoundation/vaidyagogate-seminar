@@ -179,9 +179,9 @@
 .doctor-professional .btn-primary,
 .doctor-professional button.btn-primary,
 .doctor-professional a.btn-primary {
-    background: var(--dp-accent) !important;
+    background: var(--dp-button, var(--dp-accent)) !important;
     color: #ffffff !important;
-    border: 1px solid var(--dp-accent) !important;
+    border: 1px solid var(--dp-button, var(--dp-accent)) !important;
     border-radius: 6px !important;
     box-shadow: none !important;
     font-weight: 600 !important;
@@ -189,8 +189,9 @@
     filter: none !important;
 }
 .doctor-professional .btn-primary:hover {
-    background: var(--dp-accent-dark) !important;
-    border-color: var(--dp-accent-dark) !important;
+    background: var(--dp-button-dark, var(--dp-accent-dark)) !important;
+    border-color: var(--dp-button-dark, var(--dp-accent-dark)) !important;
+    filter: brightness(.92) !important;
     filter: none !important;
     transform: none !important;
 }
@@ -557,4 +558,14 @@
     .doctor-professional .content-area, .doctor-professional .tab-content { padding-left: 12px !important; padding-right: 12px !important; }
     .doctor-professional .card { border-radius: 10px !important; }
     body.doctor-nav-open .doctor-bottom-nav { display: none; }
+}
+
+/* ---------- Blue buttons by default + live-chat launcher raised ---------- */
+.doctor-professional { --dp-button: #1d4ed8; --dp-button-dark: #1e40af; }
+.doctor-professional .btn-secondary,
+.doctor-professional button.btn-secondary { color: var(--dp-button, var(--dp-accent)) !important; border-color: var(--dp-button, var(--dp-accent)) !important; background: #fff !important; }
+.doctor-professional .btn-secondary:hover { background: #eff6ff !important; }
+.doctor-professional #vgmf-doctor-live-launcher { bottom: 88px !important; background: var(--dp-button, var(--dp-accent)) !important; box-shadow: 0 8px 24px rgba(29,78,216,.3) !important; }
+@media (max-width: 768px) {
+    .doctor-professional #vgmf-doctor-live-launcher { bottom: calc(96px + env(safe-area-inset-bottom)) !important; right: 14px !important; width: 50px !important; height: 50px !important; }
 }
