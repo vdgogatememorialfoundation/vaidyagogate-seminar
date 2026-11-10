@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css?v=20260620theme1">
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
     <link rel="stylesheet" href="/css/video-library.css?v=20261102ads1">
-    <link rel="stylesheet" href="/css/doctor-professional.css?v=20261106dash1">
+    <link rel="stylesheet" href="/css/doctor-professional.css?v=20261110shell1">
     <style>
         :root {
             --doctor-primary: #0f766e;
@@ -297,6 +297,7 @@
     <div class="dashboard-container hidden" id="dashboard-main">
         <aside class="sidebar">
             <div class="sidebar-header">
+                <button type="button" class="sidebar-collapse-btn" id="doctor-sidebar-collapse" aria-label="Collapse menu" title="Collapse menu"><i class="fas fa-angle-double-left"></i></button>
                 <div data-site-logo data-logo-height="40px" data-logo-fallback="icon" style="margin-bottom:10px;"></div>
                 <div class="doctor-sidebar-photo-wrap hidden" id="sidebar-profile-photo-wrap">
                     <img id="sidebar-profile-photo" class="doctor-sidebar-photo" alt="Your profile photo" src="">
@@ -331,6 +332,13 @@
         </aside>
 
         <div id="doctor-nav-backdrop" class="doctor-nav-backdrop" aria-hidden="true"></div>
+        <nav class="doctor-bottom-nav" id="doctor-bottom-nav" aria-label="Quick navigation">
+            <button type="button" data-tab="tab-dashboard"><i class="fas fa-home"></i><span>Home</span></button>
+            <button type="button" data-tab="tab-seminars"><i class="fas fa-calendar-check"></i><span>Seminars</span></button>
+            <button type="button" data-tab="tab-applications"><i class="fas fa-tasks"></i><span>Track</span></button>
+            <button type="button" data-tab="tab-ticket"><i class="fas fa-qrcode"></i><span>Tickets</span></button>
+            <button type="button" data-more="1"><i class="fas fa-ellipsis-h"></i><span>More</span></button>
+        </nav>
 
         <div class="main-content">
             <header class="top-header">
@@ -992,7 +1000,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-    <script src="/js/portal-theme.js?v=20260620theme1"></script>
+    <script src="/js/portal-theme.js?v=20261110shell1"></script>
     <script src="/js/site-seo.js?v=20260608seo2"></script>
     <script src="/js/portal-datetime.js?v=20260917a"></script>
     <script src="/js/site-branding.js"></script>
@@ -1034,7 +1042,7 @@
     })();
     </script>
     <script src="/js/seat-picker.js?v=20261106seat1"></script>
-    <script src="/js/doctor.js?v=20261106seat1"></script>
+    <script src="/js/doctor.js?v=20261110shell1"></script>
     <script src="/js/doctor-online-seminar.js?v=20261030hall2"></script>
 </body>
 </html>

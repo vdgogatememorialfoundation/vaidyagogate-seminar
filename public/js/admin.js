@@ -25171,3 +25171,28 @@ async function seatMapAssign() {
     if (!r.ok) return alert(d.error || 'Failed');
     seatMapLoadOccupancy(seatMapState.seminarId);
 }
+
+
+const DOCTOR_THEME_PRESETS = {
+    classic: { primary: '#0f4c81', sidebar: '#ffffff', sidebarText: '#0f172a', accent: '#0f4c81', text: '#0f172a', bg: '#ffffff' },
+    royal:   { primary: '#1d4ed8', sidebar: '#ffffff', sidebarText: '#1e293b', accent: '#2563eb', text: '#1e293b', bg: '#ffffff' },
+    teal:    { primary: '#0f766e', sidebar: '#ffffff', sidebarText: '#0f172a', accent: '#0d9488', text: '#0f172a', bg: '#ffffff' },
+    indigo:  { primary: '#4338ca', sidebar: '#ffffff', sidebarText: '#1e1b4b', accent: '#4f46e5', text: '#1e1b4b', bg: '#ffffff' },
+    emerald: { primary: '#047857', sidebar: '#ffffff', sidebarText: '#0f172a', accent: '#059669', text: '#0f172a', bg: '#ffffff' },
+    ink:     { primary: '#111827', sidebar: '#ffffff', sidebarText: '#111827', accent: '#111827', text: '#111827', bg: '#ffffff' },
+    maroon:  { primary: '#8f2d2d', sidebar: '#ffffff', sidebarText: '#1f2937', accent: '#b45309', text: '#1f2937', bg: '#ffffff' }
+};
+function applyDoctorThemePreset(name) {
+    const p = DOCTOR_THEME_PRESETS[name];
+    if (!p) return;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set('pt-doctor-primary', p.primary);
+    set('pt-doctor-sidebar', p.sidebar);
+    set('pt-doctor-sidebar-text', p.sidebarText);
+    set('pt-doctor-accent', p.accent);
+    set('pt-doctor-text', p.text);
+    set('pt-doctor-bg', p.bg);
+    const msg = document.getElementById('pt-save-msg');
+    if (msg) { msg.style.color = '#0f766e'; msg.textContent = 'Preset applied to the doctor portal colours — press "Save portal themes" to publish.'; }
+}
+window.applyDoctorThemePreset = applyDoctorThemePreset;
