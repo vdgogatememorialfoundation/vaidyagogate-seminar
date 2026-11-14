@@ -93,6 +93,12 @@
             if (theme.sidebar) {
                 root.style.setProperty('--doctor-sidebar', theme.sidebar);
             }
+            if (body && body.classList.contains('doctor-professional')) {
+                const DP = { '--dp-accent': 'primary', '--dp-accent-dark': 'primaryDark', '--dp-ink': 'text', '--dp-page': 'background', '--dp-surface': 'sidebar', '--dp-button': 'button' };
+                if (theme.button) body.style.setProperty('--dp-button-dark', theme.button);
+                Object.keys(DP).forEach((v) => { if (theme[DP[v]]) body.style.setProperty(v, theme[DP[v]]); });
+                if (theme.background) body.style.background = theme.background;
+            }
         }
 
         if (portal === 'judge') {

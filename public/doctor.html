@@ -14,7 +14,8 @@
     <link rel="stylesheet" href="/css/responsive-portals.css?v=20260620layout4">
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css?v=20260620theme1">
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
-    <link rel="stylesheet" href="/css/doctor-professional.css?v=20260918a">
+    <link rel="stylesheet" href="/css/video-library.css?v=20261102ads1">
+    <link rel="stylesheet" href="/css/doctor-professional.css?v=20261110shell5">
     <style>
         :root {
             --doctor-primary: #0f766e;
@@ -110,7 +111,7 @@
         .vtrk-header { padding: 16px; border-radius: 14px 14px 0 0; background: linear-gradient(135deg,#0f766e 0%,#0d9488 100%); color: #fff; }
         .vtrk-header.delivered { background: linear-gradient(135deg,#15803d 0%,#16a34a 100%); }
         .vtrk-header.cancelled { background: linear-gradient(135deg,#991b1b 0%,#b91c1c 100%); }
-        .vtrk-header.live { background: linear-gradient(135deg,#0f766e 0%,#0d9488 50%,#0284c7 100%); }
+        .vtrk-header.live { background: linear-gradient(135deg,#166534 0%,#15803d 55%,#22c55e 100%); }
         .vtrk-live { display: inline-flex; align-items: center; gap: 6px; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; background: rgba(255,255,255,0.2); border-radius: 999px; padding: 2px 10px; margin-bottom: 10px; }
         .vtrk-dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: vtrk-pulse 1.4s ease-out infinite; }
         @keyframes vtrk-pulse { 0%{box-shadow:0 0 0 0 rgba(255,255,255,.7)} 70%{box-shadow:0 0 0 7px rgba(255,255,255,0)} 100%{box-shadow:0 0 0 0 rgba(255,255,255,0)} }
@@ -125,18 +126,18 @@
         .vtrk-step { display: flex; gap: 0; min-height: 52px; }
         .vtrk-step-left { display: flex; flex-direction: column; align-items: center; width: 52px; flex-shrink: 0; }
         .vtrk-step-circle { width: 32px; height: 32px; border-radius: 50%; background: #e2e8f0; color: #94a3b8; display: flex; align-items: center; justify-content: center; font-size: 0.78rem; border: 3px solid #f8fafc; z-index: 1; flex-shrink: 0; }
-        .vtrk-step.done .vtrk-step-circle { background: #10b981; color: #fff; border-color: #d1fae5; }
-        .vtrk-step.active .vtrk-step-circle { background: #0f766e; color: #fff; border-color: #ccfbf1; box-shadow: 0 0 0 4px rgba(15,118,110,0.15); }
+        .vtrk-step.done .vtrk-step-circle { background: #16a34a; color: #fff; border-color: #dcfce7; }
+        .vtrk-step.active .vtrk-step-circle { background: #15803d; color: #fff; border-color: #bbf7d0; box-shadow: 0 0 0 4px rgba(22,163,74,0.18); }
         .vtrk-step-line { flex: 1; width: 3px; background: #e2e8f0; margin: 2px 0; border-radius: 999px; }
-        .vtrk-step.done .vtrk-step-line { background: #6ee7b7; }
+        .vtrk-step.done .vtrk-step-line { background: #4ade80; }
         .vtrk-step-body { flex: 1; padding: 6px 12px 14px 4px; }
         .vtrk-step-title { font-weight: 700; font-size: 0.92rem; color: #1e293b; }
         .vtrk-step.upcoming .vtrk-step-title { color: #94a3b8; font-weight: 600; }
-        .vtrk-step.done .vtrk-step-title { color: #059669; }
-        .vtrk-step.active .vtrk-step-title { color: #0f766e; }
+        .vtrk-step.done .vtrk-step-title { color: #15803d; }
+        .vtrk-step.active .vtrk-step-title { color: #166534; }
         .vtrk-step-sub { font-size: 0.78rem; color: #64748b; margin-top: 2px; }
         .vtrk-step.upcoming .vtrk-step-sub { color: #b0bec5; font-style: italic; }
-        .vtrk-step-when { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: #0f766e; font-weight: 600; margin-top: 4px; }
+        .vtrk-step-when { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: #15803d; font-weight: 600; margin-top: 4px; }
         /* Events */
         .vtrk-events { background: #f8fafc; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 14px 14px; padding: 12px 14px; }
         .vtrk-events-title { font-size: 0.78rem; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
@@ -191,7 +192,7 @@
         .sat-step-pop { animation: sat-step-in 0.4s ease both; }
         @keyframes sat-step-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
         .sat-step-active-glow .vtrk-step-circle { animation: sat-active-glow 2s ease-in-out infinite; }
-        @keyframes sat-active-glow { 0%,100% { box-shadow: 0 0 0 4px rgba(15,118,110,0.15); } 50% { box-shadow: 0 0 0 8px rgba(15,118,110,0.28); } }
+        @keyframes sat-active-glow { 0%,100% { box-shadow: 0 0 0 4px rgba(22,163,74,0.18); } 50% { box-shadow: 0 0 0 8px rgba(22,163,74,0.32); } }
         .sat-icon-spin { animation: sat-spin 2.5s linear infinite; }
         @keyframes sat-spin { to { transform: rotate(360deg); } }
         .sat-step-upcoming { color: #94a3b8 !important; font-style: italic; font-weight: 500 !important; }
@@ -296,6 +297,7 @@
     <div class="dashboard-container hidden" id="dashboard-main">
         <aside class="sidebar">
             <div class="sidebar-header">
+                <button type="button" class="sidebar-collapse-btn" id="doctor-sidebar-collapse" aria-label="Collapse menu" title="Collapse menu"><i class="fas fa-angle-double-left"></i></button>
                 <div data-site-logo data-logo-height="40px" data-logo-fallback="icon" style="margin-bottom:10px;"></div>
                 <div class="doctor-sidebar-photo-wrap hidden" id="sidebar-profile-photo-wrap">
                     <img id="sidebar-profile-photo" class="doctor-sidebar-photo" alt="Your profile photo" src="">
@@ -317,6 +319,11 @@
                 <button type="button" class="menu-item" data-tab="tab-refunds"><i class="fas fa-undo-alt"></i> <span data-i18n="doctor.menu.refunds">Refund tracking</span></button>
                 <button type="button" class="menu-item" data-tab="tab-receipts"><i class="fas fa-file-invoice"></i> <span data-i18n="doctor.menu.receipts">Receipts</span></button>
                 <button type="button" class="menu-item hidden" id="nav-books" data-tab="tab-books"><i class="fas fa-book"></i> <span data-i18n="doctor.menu.books">Book orders</span></button>
+                <button type="button" class="menu-item" data-tab="tab-videos"><i class="fas fa-video"></i> Seminar videos</button>
+                <button type="button" class="menu-item" data-tab="tab-video-subscription"><i class="fas fa-id-card"></i> My subscription</button>
+                <button type="button" class="menu-item" data-tab="tab-video-devices"><i class="fas fa-laptop"></i> My devices</button>
+                <button type="button" class="menu-item" data-tab="tab-video-license"><i class="fas fa-fingerprint"></i> My license ID</button>
+                <button type="button" class="menu-item" data-tab="tab-transactions"><i class="fas fa-list-alt"></i> My transactions</button>
                 <button type="button" class="menu-item" data-tab="tab-payments"><i class="fas fa-credit-card"></i> <span data-i18n="doctor.menu.payments">Payments</span></button>
                 <button type="button" class="menu-item" data-tab="tab-ticket"><i class="fas fa-qrcode"></i> <span data-i18n="doctor.menu.tickets">Participant tickets</span></button>
                 <button type="button" class="menu-item" data-tab="tab-certificate"><i class="fas fa-award"></i> Certificates</button>
@@ -325,6 +332,13 @@
         </aside>
 
         <div id="doctor-nav-backdrop" class="doctor-nav-backdrop" aria-hidden="true"></div>
+        <nav class="doctor-bottom-nav" id="doctor-bottom-nav" aria-label="Quick navigation">
+            <button type="button" data-tab="tab-dashboard"><i class="fas fa-home"></i><span>Home</span></button>
+            <button type="button" data-tab="tab-seminars"><i class="fas fa-calendar-check"></i><span>Seminars</span></button>
+            <button type="button" data-tab="tab-applications"><i class="fas fa-tasks"></i><span>Track</span></button>
+            <button type="button" data-tab="tab-ticket"><i class="fas fa-qrcode"></i><span>Tickets</span></button>
+            <button type="button" data-more="1"><i class="fas fa-ellipsis-h"></i><span>More</span></button>
+        </nav>
 
         <div class="main-content">
             <header class="top-header">
@@ -358,23 +372,50 @@
                 <div id="tab-dashboard" class="tab-pane hidden">
                     <h2 class="section-title" data-i18n="doctor.section.dashboard">Dashboard</h2>
                     <div data-doctor-updates-anchor></div>
-                    <p style="color: #64748b; margin: -10px 0 20px;">Overview of your seminar activity. Use <strong>Seminar feedback</strong> and <strong>Support tickets</strong> in the menu. Live chat is the chat button at the bottom right.</p>
-                    <div class="stat-grid">
-                        <div class="stat-card"><h4 id="stat-registered">—</h4><p>Registered seminars</p></div>
-                        <div class="stat-card" style="border-top-color:#10b981;"><h4 id="stat-paid">—</h4><p>Paid / confirmed</p></div>
-                        <div class="stat-card" style="border-top-color:#f59e0b;"><h4 id="stat-checked">—</h4><p>Checked in</p></div>
-                        <div class="stat-card" style="border-top-color:#8b5cf6;"><h4 id="stat-feedback">—</h4><p>Feedback submitted</p></div>
-                        <div class="stat-card" style="border-top-color:#0ea5e9;"><h4 id="stat-abstracts">—</h4><p>Case presentations</p></div>
-                        <div class="stat-card" style="border-top-color:#ec4899;"><h4 id="stat-ptix">—</h4><p>Participant e‑tickets</p></div>
-                        <div class="stat-card" style="border-top-color:#64748b;"><h4 id="stat-suptix">—</h4><p>Support tickets</p></div>
+                    <div class="dv2-hero" id="dv2-hero">
+                        <div>
+                            <p class="dv2-kicker" id="dv2-greeting">Welcome back</p>
+                            <h3 class="dv2-name" id="dv2-name">—</h3>
+                            <p class="dv2-sub" id="dv2-sub"></p>
+                        </div>
+                        <div class="dv2-hero-actions">
+                            <button type="button" class="btn-primary" data-doctor-tab="tab-seminars" onclick="switchTab('tab-seminars')"><i class="fas fa-calendar-plus"></i> Register for a seminar</button>
+                            <button type="button" class="btn-secondary" data-doctor-tab="tab-profile" onclick="switchTab('tab-profile')"><i class="fas fa-user"></i> My profile</button>
+                        </div>
+                    </div>
+                    <div id="dash-pending-fields" class="hidden"></div>
+                    <div id="dash-payment-due" class="hidden"></div>
+                    <div class="dv2-grid">
+                        <div class="card dv2-next" id="dv2-next">
+                            <h3><i class="fas fa-ticket"></i> Your next seminar</h3>
+                            <p class="dv2-muted">No upcoming seminar yet. Browse the available seminars and register.</p>
+                        </div>
+                        <div class="card dv2-activity" id="dv2-activity">
+                            <h3><i class="fas fa-clock-rotate-left"></i> Recent activity</h3>
+                            <p class="dv2-muted">Your application updates will appear here.</p>
+                        </div>
+                    </div>
+                    <div class="stat-grid dv2-stats">
+                        <div class="stat-card" data-doctor-tab="tab-applications" onclick="switchTab('tab-applications')"><i class="fas fa-file-lines"></i><h4 id="stat-registered">—</h4><p>Registered seminars</p></div>
+                        <div class="stat-card" style="border-top-color:#10b981;" data-doctor-tab="tab-applications" onclick="switchTab('tab-applications')"><i class="fas fa-circle-check"></i><h4 id="stat-paid">—</h4><p>Paid / confirmed</p></div>
+                        <div class="stat-card" style="border-top-color:#f59e0b;"><i class="fas fa-qrcode"></i><h4 id="stat-checked">—</h4><p>Checked in</p></div>
+                        <div class="stat-card" style="border-top-color:#c9a227;" data-doctor-tab="tab-certificate" onclick="switchTab('tab-certificate')" title="Open My certificates"><i class="fas fa-award"></i><h4 id="stat-certs">—</h4><p>Certificates</p></div>
+                        <div class="stat-card" style="border-top-color:#8b5cf6;" data-doctor-tab="tab-feedback" onclick="switchTab('tab-feedback')"><i class="fas fa-comment-dots"></i><h4 id="stat-feedback">—</h4><p>Feedback submitted</p></div>
+                        <div class="stat-card" style="border-top-color:#0ea5e9;" data-doctor-tab="tab-case-track" onclick="switchTab('tab-case-track')"><i class="fas fa-microscope"></i><h4 id="stat-abstracts">—</h4><p>Case presentations</p></div>
+                        <div class="stat-card" style="border-top-color:#ec4899;" data-doctor-tab="tab-ticket" onclick="switchTab('tab-ticket')"><i class="fas fa-users"></i><h4 id="stat-ptix">—</h4><p>Participant e‑tickets</p></div>
+                        <div class="stat-card" style="border-top-color:#64748b;" data-doctor-tab="tab-support" onclick="switchTab('tab-support')"><i class="fas fa-headset"></i><h4 id="stat-suptix">—</h4><p>Support tickets</p></div>
                     </div>
                     <div class="card">
-                        <h3 style="color:#0f766e;margin-bottom:10px;"><i class="fas fa-bolt"></i> Quick links</h3>
-                        <div style="display:flex;flex-wrap:wrap;gap:10px;">
-                            <button type="button" class="btn-primary" data-doctor-tab="tab-seminars" onclick="switchTab('tab-seminars')">Register for seminar</button>
-                            <button type="button" class="btn-primary" style="background:#7c3aed;" data-doctor-tab="tab-orders" onclick="switchTab('tab-orders')">Orders</button>
-                            <button type="button" class="btn-primary" style="background:#c9a227;" data-doctor-tab="tab-certificate" onclick="switchTab('tab-certificate')">My certificates</button>
-                            <button type="button" class="btn-primary" style="background:#64748b;" data-doctor-tab="tab-reset-pwd" onclick="switchTab('tab-reset-pwd')">Change password</button>
+                        <h3 style="margin-bottom:12px;"><i class="fas fa-bolt"></i> Quick actions</h3>
+                        <div class="dv2-quick">
+                            <button type="button" data-doctor-tab="tab-applications" onclick="switchTab('tab-applications')"><i class="fas fa-route"></i><span>Track applications</span></button>
+                            <button type="button" data-doctor-tab="tab-videos" onclick="switchTab('tab-videos')"><i class="fas fa-circle-play"></i><span>Seminar videos</span></button>
+                            <button type="button" data-doctor-tab="tab-certificate" onclick="switchTab('tab-certificate')"><i class="fas fa-award"></i><span>My certificates</span></button>
+                            <button type="button" data-doctor-tab="tab-orders" onclick="switchTab('tab-orders')"><i class="fas fa-box"></i><span>Orders</span></button>
+                            <button type="button" data-doctor-tab="tab-books" onclick="switchTab('tab-books')"><i class="fas fa-book"></i><span>Books</span></button>
+                            <button type="button" data-doctor-tab="tab-receipts" onclick="switchTab('tab-receipts')"><i class="fas fa-receipt"></i><span>Payment receipts</span></button>
+                            <button type="button" data-doctor-tab="tab-support" onclick="switchTab('tab-support')"><i class="fas fa-headset"></i><span>Support</span></button>
+                            <button type="button" data-doctor-tab="tab-reset-pwd" onclick="switchTab('tab-reset-pwd')"><i class="fas fa-key"></i><span>Change password</span></button>
                         </div>
                     </div>
                 </div>
@@ -461,20 +502,20 @@
                             </div>
                             <div class="form-group">
                                 <label>Phone</label>
-                                <input type="tel" id="reg-phone" autocomplete="tel">
+                                <input type="tel" id="reg-phone" autocomplete="tel" placeholder="10-digit mobile, or +country code for other countries">
                             </div>
                             <div class="reg-step-actions"><button type="button" class="btn-primary reg-back-btn" onclick="nextStep(0)"><i class="fas fa-arrow-left"></i> Back</button><button type="button" class="btn-primary reg-next-btn" onclick="nextStep(2)">Continue <i class="fas fa-arrow-right"></i></button></div>
                         </div>
 
                         <div id="step-2" class="form-step hidden">
                             <div class="form-group"><label>Address</label><textarea id="reg-addr" rows="2"></textarea></div>
+                            <div class="form-group"><label>Country</label><select id="reg-country" onchange="applyRegCountryMode()"><option value="">Select country</option></select></div>
                             <div class="reg-form-grid reg-form-grid--3">
-                                <div class="form-group"><label>PIN code</label><input type="text" id="reg-pin" inputmode="numeric" maxlength="6" placeholder="6-digit PIN" onblur="autofillAddress()"></div>
+                                <div class="form-group"><label id="reg-pin-label">PIN code</label><input type="text" id="reg-pin" inputmode="numeric" maxlength="6" placeholder="6-digit PIN" onblur="autofillAddress()"></div>
                                 <div class="form-group"><label>City</label><select id="reg-city"><option value="">Select city</option></select></div>
-                                <div class="form-group"><label>State</label><select id="reg-state"><option value="">Select state</option></select></div>
+                                <div class="form-group"><label id="reg-state-label">State</label><select id="reg-state"><option value="">Select state</option></select></div>
                             </div>
                             <p id="reg-pin-hint" class="hidden" style="font-size:0.85rem;color:#64748b;margin:-4px 0 8px;"></p>
-                            <div class="form-group"><label>Country</label><select id="reg-country"><option value="">Select country</option></select></div>
                             <div class="reg-step-actions"><button type="button" class="btn-primary reg-back-btn" onclick="nextStep(1)"><i class="fas fa-arrow-left"></i> Back</button><button type="button" class="btn-primary reg-next-btn" onclick="nextStep(3)">Continue <i class="fas fa-arrow-right"></i></button></div>
                         </div>
 
@@ -538,12 +579,14 @@
                                     </div>
                                 </div>
                             </div>
+                            <div id="reg-seat-picker" class="hidden"></div>
                             <label style="display:flex;align-items:center;gap:8px;margin:16px 0;"><input type="checkbox" id="tnc"> I agree to the terms and confirm the information is correct.</label>
                             <div style="display:flex;flex-wrap:wrap;gap:10px;">
                                 <button type="button" class="btn-primary" onclick="submitApplication()"><span data-i18n="reg.submit">Submit application</span></button>
                                 <button type="button" class="btn-primary" style="background:#0d9488;" onclick="saveApplicationDraft()">Save draft</button>
                                 <button type="button" class="btn-primary" onclick="downloadPdf()">Download preview PDF</button>
                                 <button type="button" class="btn-primary" style="background:#64748b;" onclick="nextStep(4)">Back</button>
+                                <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="clearRegistrationForm()">Clear form</button>
                                 <button type="button" class="btn-primary" style="background:#64748b;" onclick="cancelRegistration()">Cancel</button>
                             </div>
                             <p id="reg-draft-status" style="font-size:0.82rem;color:#64748b;margin:10px 0 0;"></p>
@@ -741,6 +784,52 @@
                     </div>
                 </div>
 
+                <div id="tab-videos" class="tab-pane hidden">
+                    <h2 class="section-title">Seminar videos</h2>
+                    <div id="vl-player-wrap" class="vl-player hidden">
+                        <div class="vl-player-head">
+                            <h3 id="vl-player-title">Seminar video</h3>
+                            <button type="button" class="vl-btn is-ghost is-small" id="vl-player-close"><i class="fas fa-times"></i> Close</button>
+                        </div>
+                        <div class="vl-stage">
+                            <video id="vl-video" controls playsinline preload="metadata" controlsList="nodownload noremoteplayback noplaybackrate" disablePictureInPicture oncontextmenu="return false;"></video>
+                            <div class="vl-guard" id="vl-guard" aria-hidden="true"></div>
+                            <div class="vl-wm" id="vl-wm"></div>
+                            <div class="vl-wm-fixed" id="vl-wm-fixed" aria-hidden="true"></div>
+                            <div class="vl-wm-corner" id="vl-wm-corner" aria-hidden="true"></div>
+                        </div>
+                        <p class="vl-player-msg" id="vl-player-msg"></p>
+                        <div class="vl-player-foot"><span><i class="fas fa-shield-alt"></i> Protected stream, personal to your account.</span><span>Playback on one device at a time.</span></div>
+                    </div>
+                    <div id="vl-pay" class="vl-pay hidden"></div>
+                    <div id="vl-years"><p class="vl-note">Loading…</p></div>
+                </div>
+
+                <div id="tab-video-subscription" class="tab-pane hidden">
+                    <h2 class="section-title">My subscription</h2>
+                    <p class="vl-intro">Seminar years, albums, and single videos you can watch. Paying an album unlocks every part in it. A single video unlocks only that recording.</p>
+                    <div id="vl-subscription"><p class="vl-note">Loading…</p></div>
+                </div>
+
+                <div id="tab-video-devices" class="tab-pane hidden">
+                    <h2 class="section-title">My devices</h2>
+                    <p class="vl-intro">Videos play on a limited number of your own devices. This browser is registered the first time you press Watch.</p>
+                    <div id="vl-devices-page"><p class="vl-note">Loading…</p></div>
+                </div>
+
+                <div id="tab-video-license" class="tab-pane hidden">
+                    <h2 class="section-title">My license ID</h2>
+                    <p class="vl-intro">This permanent number is printed inside every seminar video you watch. It stays with your account.</p>
+                    <div id="vl-license-page"><p class="vl-note">Loading…</p></div>
+                </div>
+
+                <div id="tab-transactions" class="tab-pane hidden">
+                    <h2 class="section-title">My transactions</h2>
+                    <p class="vl-intro">Seminar registrations, seminar videos, and book orders in one list.</p>
+                    <div id="vl-tx-filters" class="vl-filters"></div>
+                    <div id="vl-transactions"><p class="vl-note">Loading…</p></div>
+                </div>
+
                 <div id="tab-books" class="tab-pane hidden">
                     <h2 class="section-title">Books — Agnikarma &amp; Viddhakarma</h2>
                     <p style="color:#64748b;margin:-10px 0 16px;">Order Dr. R.B. Gogate books in English, Marathi, Hindi, or Kannada. Collect at the seminar book desk, or choose courier delivery with live shipping rates.</p>
@@ -755,7 +844,6 @@
                     </div>
                     <h3 style="margin:24px 0 6px;font-size:1.05rem;">My book orders</h3>
                     <p style="margin:0 0 10px;font-size:0.85rem;color:#64748b;">Courier parcels: <a href="/track-shipment" target="_blank" rel="noopener" style="color:#0f766e;font-weight:700;">Track shipment ↗</a> (order code + AWB or mobile last 4 digits).</p>
-                    <p id="books-track-live" class="hidden" style="font-size:0.82rem;color:#0f766e;font-weight:700;margin:0 0 10px;"><span class="pkg-live-dot" style="display:inline-block;vertical-align:middle;margin-right:6px;"></span> Live delivery tracking — updates every few seconds</p>
                     <div id="books-orders-list"></div>
                 </div>
 
@@ -808,6 +896,20 @@
     </div>
 
     
+    <div id="pending-fields-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2100;display:flex;justify-content:center;align-items:center;padding:20px;">
+        <div class="card" style="max-width:520px;width:100%;max-height:90vh;overflow:auto;">
+            <h3 style="margin-top:0;color:#92400e;">Complete your details</h3>
+            <p id="pending-fields-label" style="font-size:0.9rem;color:#64748b;"></p>
+            <p style="font-size:0.85rem;color:#78350f;">These details were left for you to fill in when the seminar office registered you.</p>
+            <div id="pending-fields-body"></div>
+            <p id="pending-fields-msg" style="font-size:0.85rem;color:#b91c1c;min-height:1.2em;margin:8px 0 0;"></p>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+                <button type="button" class="btn-secondary" onclick="closePendingFieldsModal()">Cancel</button>
+                <button type="button" class="btn-primary" onclick="submitPendingFields()">Save details</button>
+            </div>
+        </div>
+    </div>
+
     <div id="seminar-doc-resubmit-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2100;display:flex;justify-content:center;align-items:center;padding:20px;">
         <div class="card" style="max-width:520px;width:100%;max-height:90vh;overflow:auto;">
             <h3 style="margin-top:0;color:#9a3412;">Re-upload documents</h3>
@@ -898,22 +1000,22 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-    <script src="/js/portal-content-protection.js"></script>
-    <script src="/js/portal-theme.js?v=20260620theme1"></script>
+    <script src="/js/portal-theme.js?v=20261110shell2"></script>
     <script src="/js/site-seo.js?v=20260608seo2"></script>
     <script src="/js/portal-datetime.js?v=20260917a"></script>
     <script src="/js/site-branding.js"></script>
     <script src="/js/otp-ui.js"></script>
     <script src="/js/http-json.js"></script>
-    <script src="/js/portal-auth.js?v=20260620loginfast2"></script>
+    <script src="/js/portal-auth.js?v=20261001b"></script>
     <script src="/js/name-validation.js"></script>
-    <script src="/js/contact-validation.js"></script>
+    <script src="/js/contact-validation.js?v=20260928a"></script>
     <script src="/js/doctor-auth-ui.js?v=20260620signupredirect1"></script>
     <script src="/js/portal-upload.js?v=20260523"></script>
     <script src="/js/case-r2-upload.js?v=20260608case2"></script>
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
-    <script src="/js/doctor-books.js?v=20260610books2"></script>
+    <script src="/js/doctor-books.js?v=20261026stage1"></script>
+    <script src="/js/doctor-videos.js?v=20261102h2641"></script>
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
     <script src="/js/doctor-live-chat-widget.js?v=20260615live2"></script>
     <script src="/js/site-visitor-beacon.js?v=20260613radar6"></script>
@@ -939,6 +1041,8 @@
         }
     })();
     </script>
-    <script src="/js/doctor.js?v=20260921a"></script>
+    <script src="/js/seat-picker.js?v=20261106seat1"></script>
+    <script src="/js/doctor.js?v=20261110shell2"></script>
+    <script src="/js/doctor-online-seminar.js?v=20261030hall2"></script>
 </body>
 </html>

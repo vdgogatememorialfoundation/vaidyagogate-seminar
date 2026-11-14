@@ -24,7 +24,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/vgmf-site.css?v=20260612legal2">
-    <link rel="stylesheet" href="/css/vgmf-congress.css?v=20260616lightbox1">
+    <link rel="stylesheet" href="/css/vgmf-congress.css?v=20261105shloka1">
     <link rel="stylesheet" href="/css/vgmf-responsive.css?v=20260613fab1">
     <link rel="stylesheet" href="/css/gallery-lightbox.css">
     <script src="/js/site-seo.js?v=20260608seo2"></script>
@@ -58,6 +58,9 @@
     </script>
 
     <div class="cg-shell" id="cg-site-top">
+    <div class="cg-shloka hidden" id="cg-shloka-bar" aria-label="Shloka">
+        <p class="cg-shloka-text" id="cg-shloka-text" lang="sa"></p>
+    </div>
     <div class="cg-utility" aria-label="Contact and account">
         <div class="cg-utility-inner">
             <div class="cg-utility-contacts">
@@ -478,9 +481,8 @@
     </div>
 
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
-    <script src="/js/vgmf-home.js?v=20260612legal2"></script>
+    <script src="/js/vgmf-home.js?v=20261105shloka1"></script>
     <script src="/js/portal-theme.js?v=20260620theme1"></script>
     <script src="/js/vgmf-congress.js?v=20260616popup1"></script>
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
@@ -1900,7 +1902,7 @@
                     '<div class="box"><h2 class="cv-home-cd-m" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">MINUTES</span></div>' +
                     '<div class="box"><h2 class="cv-home-cd-s" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">SECONDS</span></div>' +
                     '</div>' +
-                    '<p style="margin:12px 0 0;"><a href="/verify-certificate" style="color:#0f766e;font-weight:600;">Open certificate verification page</a></p>' +
+                    '<p style="margin:12px 0 0;"><a href="/verify-certificate" style="color:#0f766e;font-weight:600;">Open certificate verification page</a> · <a href="/certificate-scanner" style="color:#0f766e;font-weight:600;">Scan a certificate</a></p>' +
                     '</div>';
                 const tick = () => {
                     const dist = new Date(opensAt).getTime() - Date.now();
@@ -2058,7 +2060,7 @@
     </script>
     <script src="/js/site-branding.js" defer></script>
     <script src="/js/name-validation.js" defer></script>
-    <script src="/js/contact-validation.js" defer></script>
+    <script src="/js/contact-validation.js?v=20260928a" defer></script>
     <script src="/js/site-visitor-beacon.js?v=20260613radar6"></script>
 </body>
 </html>

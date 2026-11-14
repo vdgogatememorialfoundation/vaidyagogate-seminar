@@ -1,3 +1,33 @@
+/** Admin-set shloka lines above the top bar (Site CMS → Top bar). Rotates when more than one line. */
+function applyShlokaBar(cfg) {
+    const bar = document.getElementById('cg-shloka-bar');
+    const text = document.getElementById('cg-shloka-text');
+    if (!bar || !text) return;
+    const lines = cfg && cfg.enabled && Array.isArray(cfg.lines) ? cfg.lines.map((l) => String(l || '').trim()).filter(Boolean) : [];
+    if (window.__shlokaTimer) {
+        clearInterval(window.__shlokaTimer);
+        window.__shlokaTimer = null;
+    }
+    if (!lines.length) {
+        bar.classList.add('hidden');
+        return;
+    }
+    let i = 0;
+    const show = () => {
+        text.classList.remove('cg-shloka-in');
+        text.textContent = lines[i % lines.length];
+        void text.offsetWidth;
+        text.classList.add('cg-shloka-in');
+        i += 1;
+    };
+    show();
+    bar.classList.remove('hidden');
+    if (lines.length > 1) {
+        const ms = Math.min(120, Math.max(3, Number(cfg.intervalSec) || 8)) * 1000;
+        window.__shlokaTimer = setInterval(show, ms);
+    }
+}
+
 /**
  * Public homepage — CMS-driven content
  */
@@ -300,6 +330,7 @@
 
         window.applySiteFooterLegal(cms);
 
+        applyShlokaBar(cms.shlokaBar);
         const top = cms.topBar || {};
         setText('top-email', top.email);
         setText('top-phone', top.phone);
