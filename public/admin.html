@@ -641,7 +641,7 @@
 
             <div id="tab-email-compose" class="tab-pane hidden">
                 <h2 style="margin-bottom:8px;">Send email &amp; conversations</h2>
-                <p style="color:#64748b;margin:-4px 0 16px;">Outbound mail uses ZeptoMail. With <strong>Track email replies</strong> on, each send opens a conversation thread — participants can reply by email and you reply here. Case judges use the Judge portal (same inbound setup). For ~10k users use bulk send (500 per batch); inbound via Mailparser.io free tier + webhook.</p>
+                <p style="color:#64748b;margin:-4px 0 16px;">Outbound mail uses ZeptoMail. With <strong>Track email replies</strong> on, each send opens a conversation thread — participants can reply by email and you reply here. Case judges use the Judge portal (same inbound setup). Bulk send handles up to 20,000 recipients per send (queued and paced by the hourly limit below); inbound via Mailparser.io free tier + webhook.</p>
                 <div class="card" style="margin-bottom:16px;border-color:#bae6fd;background:#f0f9ff;">
                     <h3 style="margin:0 0 8px;color:#0369a1;"><i class="fas fa-inbox"></i> Support ticket email replies (free — no Mailparser)</h3>
                     <p id="mail-inbound-status" style="margin:0 0 8px;font-size:0.88rem;color:#475569;">Checking…</p>
